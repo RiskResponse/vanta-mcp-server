@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "vanta": {
+      "command": "node",
+      "args": ["/path/to/vanta-mcp-server/dist/index.js"],
+      "env": {
+        "VANTA_CLIENT_ID": "your_client_id_here",
+        "VANTA_CLIENT_SECRET": "your_client_secret_here",
+        "VANTA_SCOPES": "vanta-api.all:read"
+      }
+    }
+  }
+}
+

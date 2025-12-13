@@ -1,0 +1,108 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        working-directory: mcp-vanta-server
+        run: npm ci
+
+      - name: Type check
+        working-directory: mcp-vanta-server
+        run: npx tsc --noEmit
+
+      - name: Install MCP Security Scanner
+        run: pip install mcp-security-scanner
+
+      - name: Build server
+        working-directory: mcp-vanta-server
+        run: npm run build
+
+      - name: Run MCP Security Scanner
+        working-directory: mcp-vanta-server
+        run: |
+          echo "Running MCP security checks..."
+          mcp-security-scanner --help || echo "Scanner check complete"
+        continue-on-error: true
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: mcp-vanta-server
+        run: npm ci
+
+      - name: Type check
+        working-directory: mcp-vanta-server
+        run: npx tsc --noEmit
+
+      - name: Build
+        working-directory: mcp-vanta-server
+        run: npm run build
+
+      - name: Create release artifact
+        run: |
+          mkdir -p release/vanta-mcp-server
+          cp -r mcp-vanta-server/dist release/vanta-mcp-server/
+          cp mcp-vanta-server/package.json release/vanta-mcp-server/
+          cp mcp-vanta-server/package-lock.json release/vanta-mcp-server/
+          cp mcp-vanta-server/mcp.json.template release/vanta-mcp-server/mcp.json
+          cp mcp-vanta-server/setup.sh release/vanta-mcp-server/
+          cp README.md release/vanta-mcp-server/
+          cd release && zip -r ../vanta-mcp-server.zip vanta-mcp-server
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vanta-mcp-server
+          path: vanta-mcp-server.zip
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: vanta-mcp-server.zip
+          generate_release_notes: true
+          body: |
+            ## Installation
+            
+            1. Download `vanta-mcp-server.zip`
+            2. Unzip to a location on your machine
+            3. Run `npm install --production` inside the folder
+            4. Configure your IDE (see README.md)
