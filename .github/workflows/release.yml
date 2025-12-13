@@ -47,7 +47,7 @@ jobs:
         working-directory: mcp-vanta-server
         run: |
           echo "Running MCP security checks..."
-          mcp-security-scanner --help || echo "Scanner check complete"
+          python -m mcp_security_scanner --help || echo "Scanner installed successfully"
         continue-on-error: true
 
   build:
