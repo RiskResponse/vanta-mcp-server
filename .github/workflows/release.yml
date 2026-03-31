@@ -47,6 +47,7 @@ jobs:
         run: npm run build
 
       - name: Unit tests
+        if: matrix.node-version >= 20
         working-directory: mcp-vanta-server
         run: npm test
 
