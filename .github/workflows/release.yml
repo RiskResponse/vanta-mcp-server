@@ -14,18 +14,29 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    
+    strategy:
+      matrix:
+        node-version: [18, 20, 22]
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: ${{ matrix.node-version }}
 
       - name: Install dependencies
         working-directory: mcp-vanta-server
         run: npm ci
+
+      - name: Audit dependencies
+        working-directory: mcp-vanta-server
+        run: npm audit --omit=dev
+
+      - name: Lint
+        working-directory: mcp-vanta-server
+        run: npm run lint
 
       - name: Type check
         working-directory: mcp-vanta-server
@@ -35,11 +46,17 @@ jobs:
         working-directory: mcp-vanta-server
         run: npm run build
 
-      - name: Security checks
-        run: |
-          echo "✅ TypeScript compiled successfully"
-          echo "✅ No runtime errors detected"
-          # Future: Add mcp-security-scanner once module invocation is confirmed
+      - name: Unit tests
+        working-directory: mcp-vanta-server
+        run: npm test
+
+      - name: Upload build artifacts
+        if: matrix.node-version == 20
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: mcp-vanta-server/dist/
+          retention-days: 1
 
   build:
     needs: test
@@ -50,22 +67,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
         with:
-          node-version: '20'
-
-      - name: Install dependencies
-        working-directory: mcp-vanta-server
-        run: npm ci
-
-      - name: Type check
-        working-directory: mcp-vanta-server
-        run: npx tsc --noEmit
-
-      - name: Build
-        working-directory: mcp-vanta-server
-        run: npm run build
+          name: build-output
+          path: mcp-vanta-server/dist/
 
       - name: Create release artifact
         run: |
@@ -86,13 +92,13 @@ jobs:
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: vanta-mcp-server.zip
           generate_release_notes: true
           body: |
             ## Installation
-            
+
             1. Download `vanta-mcp-server.zip`
             2. Unzip to a location on your machine
             3. Run `npm install --production` inside the folder
