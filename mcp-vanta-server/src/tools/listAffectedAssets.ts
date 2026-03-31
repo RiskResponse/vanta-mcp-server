@@ -1,20 +1,27 @@
-import { getVantaResources } from "../data/vantaClient.js";
+import { getVantaTestEntities } from "../data/vantaClient.js";
 
 interface ListAffectedAssetsArgs {
   testId: string;
+  pageSize?: number;
+  pageCursor?: string;
 }
 
 export async function listAffectedAssets(args: ListAffectedAssetsArgs) {
   try {
-    const response = await getVantaResources(args.testId);
-    const assets = response.results?.data || response.data || response;
+    const response = await getVantaTestEntities(args.testId, {
+      pageSize: args.pageSize,
+      pageCursor: args.pageCursor,
+    });
 
-    if (!assets || assets.length === 0) {
+    const entities = response.results?.data ?? [];
+    const pageInfo = response.results?.pageInfo;
+
+    if (entities.length === 0) {
       return {
         content: [
           {
-            type: "text",
-            text: `No affected assets found for test: ${args.testId}`,
+            type: "text" as const,
+            text: `No failing entities found for test: ${args.testId}`,
           },
         ],
       };
@@ -23,18 +30,16 @@ export async function listAffectedAssets(args: ListAffectedAssetsArgs) {
     return {
       content: [
         {
-          type: "text",
-          text: JSON.stringify(assets, null, 2),
+          type: "text" as const,
+          text: JSON.stringify({ entities, pageInfo }, null, 2),
         },
       ],
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
     return {
       content: [
-        {
-          type: "text",
-          text: `Error fetching assets: ${error.message}`,
-        },
+        { type: "text" as const, text: `Error fetching entities: ${message}` },
       ],
       isError: true,
     };

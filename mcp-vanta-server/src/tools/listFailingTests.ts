@@ -1,37 +1,41 @@
-import { getVantaTests } from "../data/vantaClient.js";
+import { getVantaTests, type TestFilters } from "../data/vantaClient.js";
 
 interface ListFailingTestsArgs {
-  environment?: string;
-  severity?: string;
+  categoryFilter?: string;
+  frameworkFilter?: string;
+  pageSize?: number;
+  pageCursor?: string;
 }
 
 export async function listFailingTests(args: ListFailingTestsArgs) {
   try {
-    const response = await getVantaTests(args);
-    const tests = response.results?.data || response.data || response;
+    const filters: TestFilters = {
+      statusFilter: "NEEDS_ATTENTION",
+      categoryFilter: args.categoryFilter,
+      frameworkFilter: args.frameworkFilter,
+    };
 
-    const summary = tests.map((test: any) => ({
-      id: test.id,
-      name: test.name,
-      description: test.description,
-      lastTestRunDate: test.lastTestRunDate,
-    }));
+    const response = await getVantaTests(filters, {
+      pageSize: args.pageSize,
+      pageCursor: args.pageCursor,
+    });
+
+    const tests = response.results?.data ?? [];
+    const pageInfo = response.results?.pageInfo;
 
     return {
       content: [
         {
-          type: "text",
-          text: JSON.stringify(summary, null, 2),
+          type: "text" as const,
+          text: JSON.stringify({ tests, pageInfo }, null, 2),
         },
       ],
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
     return {
       content: [
-        {
-          type: "text",
-          text: `Error fetching tests: ${error.message}`,
-        },
+        { type: "text" as const, text: `Error fetching tests: ${message}` },
       ],
       isError: true,
     };

@@ -11,123 +11,171 @@ import { listFailingTests } from "./tools/listFailingTests.js";
 import { getTestDetails } from "./tools/getTestDetails.js";
 import { listAffectedAssets } from "./tools/listAffectedAssets.js";
 import { suggestRemediation } from "./tools/suggestRemediation.js";
+import {
+  ListFailingTestsSchema,
+  GetTestDetailsSchema,
+  ListAffectedAssetsSchema,
+  SuggestRemediationSchema,
+} from "./validation.js";
 
 const server = new Server(
   {
     name: "vanta-mcp-server",
-    version: "1.0.0",
+    version: "1.1.0",
   },
   {
     capabilities: {
       tools: {},
     },
-  }
+  },
 );
 
-// Define available tools
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
       {
         name: "list_failing_tests",
         description:
-          "List all failing compliance tests from Vanta. Returns an array of test summaries including ID, name, severity, and category.",
+          "List compliance tests that need attention in Vanta. Returns test summaries with pagination. Defaults to showing tests with status NEEDS_ATTENTION.",
         inputSchema: {
           type: "object",
           properties: {
-            environment: {
+            categoryFilter: {
               type: "string",
               description:
-                "Filter by environment (e.g., 'staging', 'production'). Optional.",
+                "Filter by category (e.g., 'INFRASTRUCTURE', 'ACCOUNTS_ACCESS', 'PEOPLE', 'VENDORS').",
             },
-            severity: {
+            frameworkFilter: {
               type: "string",
-              enum: ["critical", "high", "medium", "low"],
-              description: "Filter by severity level. Optional.",
+              description: "Filter by compliance framework.",
+            },
+            pageSize: {
+              type: "number",
+              description: "Number of results per page (default: 100).",
+            },
+            pageCursor: {
+              type: "string",
+              description: "Cursor for fetching the next page of results.",
             },
           },
+        },
+        annotations: {
+          title: "List Failing Tests",
+          readOnlyHint: true,
+          destructiveHint: false,
+          openWorldHint: true,
         },
       },
       {
         name: "get_test_details",
         description:
-          "Get detailed information for a specific compliance test, including evidence, affected resource count, and full description.",
+          "Get detailed information for a specific compliance test by its ID.",
         inputSchema: {
           type: "object",
           properties: {
             testId: {
               type: "string",
-              description: "The unique identifier of the test (e.g., 'aws-ec2-ebs-encryption').",
+              description: "The unique identifier of the test.",
             },
           },
           required: ["testId"],
+        },
+        annotations: {
+          title: "Get Test Details",
+          readOnlyHint: true,
+          destructiveHint: false,
+          openWorldHint: true,
         },
       },
       {
         name: "list_affected_assets",
         description:
-          "List all resources/assets that are failing a specific compliance test. Returns asset IDs, types, and corresponding Terraform resource paths.",
+          "List entities (assets/resources) that are failing a specific compliance test. Returns entity details with pagination.",
         inputSchema: {
           type: "object",
           properties: {
             testId: {
               type: "string",
-              description: "The unique identifier of the test to get affected assets for.",
+              description: "The unique identifier of the test.",
+            },
+            pageSize: {
+              type: "number",
+              description: "Number of results per page (default: 100).",
+            },
+            pageCursor: {
+              type: "string",
+              description: "Cursor for fetching the next page of results.",
             },
           },
           required: ["testId"],
+        },
+        annotations: {
+          title: "List Affected Assets",
+          readOnlyHint: true,
+          destructiveHint: false,
+          openWorldHint: true,
         },
       },
       {
         name: "suggest_remediation",
         description:
-          "Get remediation guidance for a failing test, including step-by-step instructions and Terraform code snippets to fix the issue.",
+          "Get test details and failing entities for a specific test, providing context for generating remediation guidance.",
         inputSchema: {
           type: "object",
           properties: {
             testId: {
               type: "string",
-              description: "The unique identifier of the test to get remediation for.",
+              description:
+                "The unique identifier of the test to get remediation context for.",
             },
           },
           required: ["testId"],
+        },
+        annotations: {
+          title: "Suggest Remediation",
+          readOnlyHint: true,
+          destructiveHint: false,
+          openWorldHint: true,
         },
       },
     ],
   };
 });
 
-// Handle tool calls
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
+  const ts = new Date().toISOString();
+  console.error(`[vanta-mcp ${ts}] Tool called: ${name}`);
 
-  switch (name) {
-    case "list_failing_tests":
-      return listFailingTests(args as { environment?: string; severity?: string });
+  try {
+    switch (name) {
+      case "list_failing_tests":
+        return listFailingTests(ListFailingTestsSchema.parse(args ?? {}));
 
-    case "get_test_details":
-      return getTestDetails(args as { testId: string });
+      case "get_test_details":
+        return getTestDetails(GetTestDetailsSchema.parse(args));
 
-    case "list_affected_assets":
-      return listAffectedAssets(args as { testId: string });
+      case "list_affected_assets":
+        return listAffectedAssets(ListAffectedAssetsSchema.parse(args));
 
-    case "suggest_remediation":
-      return suggestRemediation(args as { testId: string });
+      case "suggest_remediation":
+        return suggestRemediation(SuggestRemediationSchema.parse(args));
 
-    default:
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Unknown tool: ${name}`,
-          },
-        ],
-        isError: true,
-      };
+      default:
+        return {
+          content: [{ type: "text", text: `Unknown tool: ${name}` }],
+          isError: true,
+        };
+    }
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      content: [{ type: "text", text: `Invalid arguments: ${message}` }],
+      isError: true,
+    };
   }
 });
 
-// Start the server
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
@@ -138,4 +186,3 @@ main().catch((error) => {
   console.error("Fatal error:", error);
   process.exit(1);
 });
-
